@@ -1,0 +1,434 @@
+/*
+ * Adelyte Company
+ * www.adelyte.com
+ */
+
+#SYMBOL_NAME "Crescendo Cloud"
+#CATEGORY "46" "Crescendo" // Custom
+#DEFAULT_VOLATILE
+#ENABLE_DYNAMIC
+#ENABLE_TRACE
+
+
+// Constants
+
+#DEFINE_CONSTANT #KEY_VALUE_SIZE 10
+
+#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST "104.236.98.139"
+#DEFINE_CONSTANT #CRESCENDO_CLOUD_PORT 50000
+
+#DEFINE_CONSTANT #MESSAGE_DELIMITER "\x1F\x1E" // unit separator (^_) + record separator (^^)
+#DEFINE_CONSTANT #MESSAGE_KEY_DELIMITER ":\x1F " // colon + unit separator (^_) + space
+
+
+// Inputs and Outputs
+
+DIGITAL_INPUT  Connect, Disconnect;
+DIGITAL_OUTPUT Connected;
+
+DIGITAL_INPUT  Digital_Value_Is[#KEY_VALUE_SIZE];
+DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE];
+
+STRING_OUTPUT ID;
+
+STRING_OUTPUT Console_Tx;
+BUFFER_INPUT  Console_Rx[4095];
+
+STRING_INPUT  Cloud_Tx[255];
+STRING_OUTPUT Cloud_Rx;
+
+TCP_CLIENT Client[4095];
+
+STRING_PARAMETER Processor_Name[32];
+STRING_PARAMETER Prompt[16]; // EXAMPLE: \x0D\x0ACP3>
+STRING_PARAMETER Password[32];
+
+STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250];
+// STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250];
+// STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
+
+
+// Socket Functions
+
+FUNCTION __Connect__()
+{
+    SIGNED_INTEGER status;
+
+    status = SOCKETCONNECTCLIENT(Client, #CRESCENDO_CLOUD_HOST, #CRESCENDO_CLOUD_PORT, 1);
+    IF(status < 0)
+    {
+        TRACE("Crescendo Cloud: ERROR %d connecting socket to address '%s' on port  %u", status, #CRESCENDO_CLOUD_HOST, #CRESCENDO_CLOUD_PORT);
+    }
+}
+
+FUNCTION Send(STRING tx)
+{
+    SIGNED_INTEGER status;
+
+    TRACE("Crescendo Cloud: Send '%s'", tx);
+
+    status = SOCKETSEND(Client, tx);
+    IF(status < 0)
+    {
+        TRACE("Crescendo Cloud: ERROR %d connecting socket to address '%s' on port  %u", status, #CRESCENDO_CLOUD_HOST, #CRESCENDO_CLOUD_PORT);
+    }
+}
+
+FUNCTION SendKeyValue(STRING key, STRING value)
+{
+    SIGNED_INTEGER status;
+    STRING tx[4095];
+
+    MAKESTRING(tx, "%s%s%s%s", key, #MESSAGE_KEY_DELIMITER, value, #MESSAGE_DELIMITER);
+
+    Send(tx);
+}
+
+
+// Console Events
+
+STRING __Console_Tx__[32];
+
+FUNCTION SendConsole(STRING command)
+{
+    __Console_Tx__ = command;
+    CLEARBUFFER(Console_Rx);
+
+    MAKESTRING(Console_Tx, "%s\n", command);
+}
+
+FUNCTION SendConsoleDirect(STRING shell, STRING command)
+{
+    __Console_Tx__ = shell;
+    CLEARBUFFER(Console_Rx);
+
+    MAKESTRING(Console_Tx, "%s\n", command);
+}
+
+FUNCTION GetVersion()
+{
+    SendConsole("ver");
+}
+
+STRUCTURE SYSTEM
+{
+    STRING model[16], firmware[30], serial_code[8], id[25];
+    STRING system_key[32];
+    STRING mac_address[18], ip_address[15];
+};
+
+SYSTEM Processor;
+
+FUNCTION SetVersion(STRING console)
+{
+// EXAMPLE: MC3 Cntrl Eng [v1.010.0060 (Sep 29 2014), #00765E2F]
+    
+    INTEGER start, end, count;
+
+    // Model
+    start = 1;
+    end = FIND(" ", console);
+    count = end - start;
+    Processor.model = MID(console, start, count);
+
+    // Firmware
+    start = FIND("[v", console) + 2;
+    end = FIND(" ", console, start);
+    count = end - start;
+    Processor.firmware = MID(console, start, count);
+
+    // Serial Code
+    start = FIND(", #", console) + 3;
+    end = FIND("]", console, start);
+    count = end - start;
+    Processor.serial_code = MID(console, start, count);
+
+    SendKeyValue("model", Processor.model);
+    SendKeyValue("serial", Processor.serial_code);
+    SendKeyValue("firmware", Processor.firmware);
+}
+
+FUNCTION GetSystemKey()
+{
+    SendConsole("systemkey");
+}
+
+FUNCTION SetSystemKey(STRING console)
+{
+// EXAMPLE: 50846424c1d611d762d1ed53f52698db
+
+    INTEGER start, end, count;
+
+    start = 1;
+    end = FIND("\r", console);
+    count = end - start;
+    Processor.system_key = MID(console, start, count);
+
+    ID = Processor.system_key;
+
+    SendKeyValue("id", Processor.system_key);
+    SendKeyValue("password", Password);
+    SendKeyValue("name", Processor_Name);
+}
+
+FUNCTION GetProgCom()
+{
+
+}
+
+FUNCTION SetProgCom(STRING console)
+{
+/* EXAMPLE:
+Program Boot Directory: \SIMPL\app01
+Source File:  C:\Users\wes\Code\adelyte_van-de-grift-deer-valley\Lighting\Van de Grift Deer Pointe CP3\Programs\Van de Grift Deer Pointe CP3
+Program File: Van de Grift Deer Pointe CP3.smw
+System Name:  Van de Grift Deer Pointe CP3
+Programmer:   D3 Pro 3.02.008
+Compiled On:  12/2/2015 5:37 PM
+Compiler Rev: 3.03
+SYMLIB Rev:   956
+IOLIB Rev:    956
+IOPCFG Rev:   4.1.75
+CrestronDB:   52.05.013.00
+Source Env:   SIMPL Windows v4.03.14
+Target Rack:  CP3
+Config Rev:   22
+Include4.dat: 2.02.046
+*/
+
+    INTEGER start, end, count;
+
+    start = FIND("", console) + 0;
+    end = FIND("", console);
+    count = end - start;    
+}
+
+FUNCTION GetIpConfig()
+{
+    SendConsole("ipconfig");
+}
+
+FUNCTION SetIpConfig(STRING console)
+{
+/* EXAMPLE:
+Ethernet Adapter [LAN9217]:
+      Link Status ....... : OK 
+      DHCP .............. : OFF 
+      MAC Address(es).... : 00.10.7f.1f.57.05 
+      IP Address ........ : 10.0.0.151 
+      Subnet Mask ....... : 255.255.255.0 
+      IPv6 Address....... : fe80::210:7fff:fe1f:5705%5 
+      Default Gateway ... : 10.0.0.1 
+      DNS Servers........ : None 
+ */
+
+    INTEGER start, end, count;
+
+    // MAC Address
+    start = FIND("MAC Address(es).... : ", console) + 22;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.mac_address = MID(console, start, count);
+
+    // IP Address
+    start = FIND("IP Address ........ : ", console) + 22;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.ip_address = MID(console, start, count);
+
+    SendKeyValue("mac-address", Processor.mac_address);
+    SendKeyValue("local-ip-address", Processor.ip_address);
+}
+
+CHANGE Console_Rx
+{
+    STRING rx[4095];
+
+    rx = GATHER(Prompt, Console_Rx);
+    rx = LEFT(rx, LEN(rx) - LEN(Prompt)); // Trim Prompt
+
+    IF(rx = "")
+    {
+        TERMINATEEVENT;
+    }
+
+    IF(__Console_Tx__ = "systemkey")
+    {
+        SetSystemKey(rx);
+        GetVersion();
+    }
+    ELSE IF(__Console_Tx__ = "ver")
+    {
+        SetVersion(rx);
+        GetIpConfig();
+    }
+    ELSE IF(__Console_Tx__ = "ipconfig")
+    {
+        SetIpConfig(rx);
+    }
+    ELSE
+    {
+        SendKeyValue(__Console_Tx__, rx);
+    }
+}
+
+FUNCTION Heartbeat()
+{
+    WAIT(1000, __Wait_Heartbeat__)
+    {
+        SendKeyValue("heartbeat", TIME());
+        Heartbeat();
+    }
+}
+
+
+// System Events
+
+CHANGE Cloud_Tx
+{
+    Send(Cloud_Tx);
+}
+
+
+// Socket Events
+
+SOCKETCONNECT Client
+{
+    Connected = 1;
+
+    GetSystemKey();
+    // Heartbeat();
+}
+
+SOCKETDISCONNECT Client
+{
+    Connected = 0;
+    CLEARBUFFER(Client.SocketRxBuf);
+}
+
+SOCKETSTATUS Client
+{
+    SIGNED_INTEGER status;
+
+    status = SOCKETGETSTATUS();
+    TRACE("Crescendo Cloud: STATUS %d", status);
+}
+
+
+INTEGER __Parsing__;
+STRING __Rx_Buffer__[4095];
+
+SOCKETRECEIVE Client
+{
+    INTEGER i;
+    STRING rx[255], key[250];
+
+    TRACE("Crescendo Cloud: SocketRxBuf: '%s'", Client.SocketRxBuf);
+
+    __Rx_Buffer__ = __Rx_Buffer__ + Client.SocketRxBuf;
+    CLEARBUFFER(Client.SocketRxBuf);
+
+    IF(__Parsing__ = 1)
+    {
+        TERMINATEEVENT;
+    }
+    ELSE
+    {
+        __Parsing__ = 1;
+    }
+
+    WHILE(LEN(__Rx_Buffer__) > 0)
+    {
+        rx = REMOVE(#MESSAGE_DELIMITER, __Rx_Buffer__);
+
+	    TRACE("Crescendo Cloud: rx: '%s'", rx);
+	    rx = LEFT(rx, LEN(rx) - 2); // trim delimiter
+	
+	    Cloud_Rx = rx;
+	
+	    key = REMOVE(#MESSAGE_KEY_DELIMITER, rx);
+	    key = LEFT(key, LEN(key) - 3); // trim delimiter
+	
+	    TRACE("Crescendo Cloud: key:value %s:%s", key, rx);
+	
+	    IF("shell" = LEFT(key, 5))
+	    {
+	        SendConsoleDirect(key, rx);
+	    }
+	    ELSE
+        {
+		    FOR(i = 1 TO #KEY_VALUE_SIZE)
+		    {
+                IF("" = Digital_Key[i])
+                {
+                    BREAK;
+                }
+
+		        IF(key = Digital_Key[i])
+		        {
+		            IF(rx = "true")
+		            {
+		                Digital_Value[i] = 1;
+		            }
+		            ELSE
+		            {
+		                Digital_Value[i] = 0;
+		            }
+		            BREAK;
+		        }
+		    }
+        }
+
+        PROCESSLOGIC();
+    }
+
+    __Parsing__ = 0;
+}
+
+
+// Key-Value Store
+
+PUSH Digital_Value_Is
+{
+    INTEGER index;
+
+    index = GETLASTMODIFIEDARRAYINDEX();
+
+    TRACE("Digital_Value_Is[%u] true", index);
+
+    SendKeyValue(Digital_Key[index], "true");
+}
+
+RELEASE Digital_Value_Is
+{
+    INTEGER index;
+
+    index = GETLASTMODIFIEDARRAYINDEX();
+
+    TRACE("Digital_Value_Is[%u] false", index);
+
+    SendKeyValue(Digital_Key[index], "false");
+}
+
+
+// Runtime
+
+PUSH Connect
+{
+    // TODO: check if socket is connected
+    __Connect__();
+}
+
+PUSH Disconnect
+{
+    // TODO: check if socket is connected
+    SOCKETDISCONNECTCLIENT(Client);
+}
+
+FUNCTION Main()
+{
+    __Parsing__ = 0;
+    __Rx_Buffer__ = "";
+
+    WAITFORINITIALIZATIONCOMPLETE();
+}
