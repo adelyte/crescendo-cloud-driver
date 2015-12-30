@@ -37,15 +37,20 @@ BUFFER_INPUT  Console_Rx[4095];
 STRING_INPUT  Cloud_Tx[255];
 STRING_OUTPUT Cloud_Rx;
 
+ANALOG_INPUT  Analog_Value_Is[#KEY_VALUE_SIZE];
+ANALOG_OUTPUT Analog_Value[#KEY_VALUE_SIZE];
+
+STRING_INPUT Serial_Value_Is[#KEY_VALUE_SIZE][255];
+
 TCP_CLIENT Client[4095];
 
-STRING_PARAMETER Processor_Name[32];
-STRING_PARAMETER Prompt[16]; // EXAMPLE: \x0D\x0ACP3>
+STRING_PARAMETER Project[32];
 STRING_PARAMETER Password[32];
+STRING_PARAMETER Users[250];
 
 STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250];
-// STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250];
-// STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
+STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250];
+STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
 
 
 // Socket Functions
@@ -112,9 +117,10 @@ FUNCTION GetVersion()
 
 STRUCTURE SYSTEM
 {
-    STRING model[16], firmware[30], serial_code[8], id[25];
+    STRING model[16], firmware[30], serial_code[8];
     STRING system_key[32];
     STRING mac_address[18], ip_address[15];
+    STRING uptime[20];
 };
 
 SYSTEM Processor;
@@ -168,7 +174,8 @@ FUNCTION SetSystemKey(STRING console)
 
     SendKeyValue("id", Processor.system_key);
     SendKeyValue("password", Password);
-    SendKeyValue("name", Processor_Name);
+    SendKeyValue("project", Project);
+	SendKeyValue("users", Users);
 }
 
 FUNCTION GetProgCom()
@@ -240,12 +247,80 @@ Ethernet Adapter [LAN9217]:
     SendKeyValue("local-ip-address", Processor.ip_address);
 }
 
+FUNCTION GetUptime()
+{
+    SendConsole("uptime");
+}
+
+FUNCTION SetUptime(STRING console)
+{
+/* EXAMPLE
+The system has been running for 1 days 20:57:04.00
+The system last started on: Sunday, December 06, 2015 at 14:36:36
+*/
+
+    INTEGER start, end, count;
+    STRING days[5], timestamp[16];
+
+    start = FIND("running for ", console) + 12;
+    end = FIND(" days", console, start);
+    count = end - start;
+    days = MID(console, start, count);
+
+    start = end + 1;
+    end = FIND("\r\n", console, start);
+    count = end - start;
+    timestamp = MID(console, start, count);
+
+    MAKESTRING(Processor.uptime, "%s.%s", days, timestamp);
+
+    SendKeyValue("uptime", Processor.uptime);
+}
+
+FUNCTION SetKeyValues()
+{
+	INTEGER index;
+
+	FOR(index = 1 TO #KEY_VALUE_SIZE)
+	{
+		IF(Digital_Key[index] != "")
+		{
+			IF(Digital_Value_Is[index])
+			{
+	    		SendKeyValue(Digital_Key[index], "true");
+			}
+			ELSE
+			{
+	        	SendKeyValue(Digital_Key[index], "false");
+			}
+		}
+
+		IF(Analog_Key[index] != "")
+		{
+        	SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
+		}
+
+		IF(Serial_Key[index] != "")
+		{
+        	SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+		}
+	}
+}
+
+STRING __Prompt__[16];
+
 CHANGE Console_Rx
 {
-    STRING rx[4095];
+    STRING rx[4095], prompt[16];
 
-    rx = GATHER(Prompt, Console_Rx);
-    rx = LEFT(rx, LEN(rx) - LEN(Prompt)); // Trim Prompt
+	IF(__Prompt__ = "")
+	{
+    	__Prompt__ = Console_Rx;
+		TERMINATEEVENT;
+	}
+
+    rx = GATHER(__Prompt__, Console_Rx);
+    rx = LEFT(rx, LEN(rx) - LEN(__Prompt__)); // Trim Prompt
 
     IF(rx = "")
     {
@@ -265,6 +340,12 @@ CHANGE Console_Rx
     ELSE IF(__Console_Tx__ = "ipconfig")
     {
         SetIpConfig(rx);
+        GetUptime();
+    }
+    ELSE IF(__Console_Tx__ = "uptime")
+    {
+        SetUptime(rx);
+		SetKeyValues();
     }
     ELSE
     {
@@ -274,9 +355,10 @@ CHANGE Console_Rx
 
 FUNCTION Heartbeat()
 {
-    WAIT(1000, __Wait_Heartbeat__)
+	SendKeyValue("updated", TIME());
+
+    WAIT(6000, __Wait_Heartbeat__)
     {
-        SendKeyValue("heartbeat", TIME());
         Heartbeat();
     }
 }
@@ -295,9 +377,9 @@ CHANGE Cloud_Tx
 SOCKETCONNECT Client
 {
     Connected = 1;
-
+    
     GetSystemKey();
-    // Heartbeat();
+    Heartbeat();
 }
 
 SOCKETDISCONNECT Client
@@ -332,10 +414,8 @@ SOCKETRECEIVE Client
     {
         TERMINATEEVENT;
     }
-    ELSE
-    {
-        __Parsing__ = 1;
-    }
+
+    __Parsing__ = 1;
 
     WHILE(LEN(__Rx_Buffer__) > 0)
     {
@@ -357,26 +437,41 @@ SOCKETRECEIVE Client
 	    }
 	    ELSE
         {
-		    FOR(i = 1 TO #KEY_VALUE_SIZE)
-		    {
-                IF("" = Digital_Key[i])
-                {
-                    BREAK;
-                }
+			IF(rx = "true")
+			{
+			    FOR(i = 1 TO #KEY_VALUE_SIZE)
+			    {
+	                IF("" = Digital_Key[i])
+	                {
+	                    BREAK;
+	                }
+	
+			        IF(key = Digital_Key[i])
+			        {
+			            Digital_Value[i] = 1;
+			            PROCESSLOGIC();
+			            Digital_Value[i] = 0;
 
-		        IF(key = Digital_Key[i])
-		        {
-		            IF(rx = "true")
-		            {
-		                Digital_Value[i] = 1;
-		            }
-		            ELSE
-		            {
-		                Digital_Value[i] = 0;
-		            }
-		            BREAK;
-		        }
-		    }
+			            BREAK;
+			        }
+			    }
+			}
+			ELSE
+			{
+            	FOR(i = 1 TO #KEY_VALUE_SIZE)
+				{
+                	IF("" = Analog_Key[i])
+					{
+						BREAK;
+					}
+
+					IF(key = Analog_Key[i])
+					{
+                    	Analog_Value[i] = ATOI(rx);
+						BREAK;
+					}
+				}
+			}
         }
 
         PROCESSLOGIC();
@@ -410,6 +505,28 @@ RELEASE Digital_Value_Is
     SendKeyValue(Digital_Key[index], "false");
 }
 
+CHANGE Analog_Value_Is
+{
+    INTEGER index;
+
+    index = GETLASTMODIFIEDARRAYINDEX();
+
+    TRACE("Analog_Value_Is[%u] = %u", index, Analog_Value_Is[index]);
+
+    SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
+}
+
+CHANGE Serial_Value_Is
+{
+    INTEGER index;
+
+    index = GETLASTMODIFIEDARRAYINDEX();
+
+    TRACE("Serial_Value_Is[%u] = '%s'", index, Serial_Value_Is[index]);
+
+    SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+}
+
 
 // Runtime
 
@@ -428,7 +545,10 @@ PUSH Disconnect
 FUNCTION Main()
 {
     __Parsing__ = 0;
+	__Prompt__ = "";
     __Rx_Buffer__ = "";
 
     WAITFORINITIALIZATIONCOMPLETE();
+
+	SendConsoleDirect("", "\n");
 }
