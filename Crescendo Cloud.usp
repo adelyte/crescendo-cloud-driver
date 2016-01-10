@@ -32,7 +32,7 @@ DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE];
 STRING_OUTPUT ID;
 
 STRING_OUTPUT Console_Tx;
-BUFFER_INPUT  Console_Rx[4095];
+BUFFER_INPUT  Console_Rx[65534];
 
 STRING_INPUT  Cloud_Tx[255];
 STRING_OUTPUT Cloud_Rx;
@@ -398,7 +398,7 @@ SOCKETSTATUS Client
 
 
 INTEGER __Parsing__;
-STRING __Rx_Buffer__[4095];
+STRING __Rx_Buffer__[65534];
 
 SOCKETRECEIVE Client
 {
