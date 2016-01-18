@@ -14,7 +14,7 @@
 
 #DEFINE_CONSTANT #KEY_VALUE_SIZE 10
 
-#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST "104.236.98.139"
+#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST "192.168.0.19" // "104.236.98.139"
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_PORT 50000
 
 #DEFINE_CONSTANT #MESSAGE_DELIMITER "\x1F\x1E" // unit separator (^_) + record separator (^^)
@@ -45,7 +45,7 @@ STRING_INPUT Serial_Value_Is[#KEY_VALUE_SIZE][255];
 TCP_CLIENT Client[4095];
 
 STRING_PARAMETER Project[32];
-STRING_PARAMETER Password[32];
+STRING_PARAMETER System_Key[67];
 STRING_PARAMETER Users[250];
 
 STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250];
@@ -152,6 +152,8 @@ FUNCTION SetVersion(STRING console)
     SendKeyValue("model", Processor.model);
     SendKeyValue("serial", Processor.serial_code);
     SendKeyValue("firmware", Processor.firmware);
+    SendKeyValue("project", Project);
+	SendKeyValue("users", Users);
 }
 
 FUNCTION GetSystemKey()
@@ -173,9 +175,6 @@ FUNCTION SetSystemKey(STRING console)
     ID = Processor.system_key;
 
     SendKeyValue("id", Processor.system_key);
-    SendKeyValue("password", Password);
-    SendKeyValue("project", Project);
-	SendKeyValue("users", Users);
 }
 
 FUNCTION GetProgCom()
@@ -327,12 +326,7 @@ CHANGE Console_Rx
         TERMINATEEVENT;
     }
 
-    IF(__Console_Tx__ = "systemkey")
-    {
-        SetSystemKey(rx);
-        GetVersion();
-    }
-    ELSE IF(__Console_Tx__ = "ver")
+    IF(__Console_Tx__ = "ver")
     {
         SetVersion(rx);
         GetIpConfig();
@@ -378,7 +372,7 @@ SOCKETCONNECT Client
 {
     Connected = 1;
     
-    GetSystemKey();
+    GetVersion();
     Heartbeat();
 }
 
