@@ -641,7 +641,7 @@ CF=2
 n1I=1
 Cmn1=ID$\\
 mI=1
-I1=10
+I1=63
 mP=1
 P1=32d
 ]
@@ -650,12 +650,6 @@ ObjTp=Sg
 H=5
 Nm=[~UNUSED~]
 SgTp=31
-]
-[
-ObjTp=Sg
-H=10
-Nm=ID$
-SgTp=4
 ]
 [
 ObjTp=Sg
