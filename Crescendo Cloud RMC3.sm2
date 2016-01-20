@@ -1094,7 +1094,7 @@ SH=18
 Z=100
 P=570
 Ht=3
-Hi=2
+Hi=3
 ]
 [
 ObjTp=Sm
@@ -1380,7 +1380,7 @@ O4=10
 O5=46
 mP=32
 P1=Crescendo Cloud Demo
-P2=chris@adelyte.com, wes@adelyte.com
+P2=""
 P3=room-1-power-on|off
 P4=room-1-door-open|closed
 P5=""
