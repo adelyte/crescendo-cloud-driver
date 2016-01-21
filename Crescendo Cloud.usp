@@ -31,7 +31,7 @@ DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE];
 
 STRING_OUTPUT ID;
 
-STRING_OUTPUT Console_Tx;
+STRING_OUTPUT Console_Prompt, Console_Tx;
 BUFFER_INPUT  Console_Rx[65534];
 
 STRING_INPUT  Cloud_Tx[255];
@@ -313,7 +313,10 @@ CHANGE Console_Rx
 
 	IF(__Prompt__ = "")
 	{
-    	__Prompt__ = Console_Rx;
+    	__Prompt__ = REMOVE(">", Console_Rx);
+		Console_Prompt = __Prompt__;
+
+		CLEARBUFFER(Console_Rx);
 		TERMINATEEVENT;
 	}
 
@@ -543,5 +546,5 @@ FUNCTION Main()
 
     WAITFORINITIALIZATIONCOMPLETE();
 
-	SendConsoleDirect("", "\n");
+	SendConsoleDirect("", "\r");
 }
