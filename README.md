@@ -22,6 +22,11 @@ Values are looked up on receipt using a hash table of keys. This hash table is e
 For performance reasons, the driver does not use encryption or checksums. Enterprise-grade encryption between the client network and Crescendo Cloud is available via IPSec, which should be configured on the client network equipment. Checksums are delegated to TCP, which includes a robust 16-bit checksum on every segment. 
 
 ### Password
-A future version of the driver may include an optional password. Presently, the processor model, serial number, and MAC address are concatenated to form a processor ID, which functions as a password. A naive adversary wishing to exploit a random processor would have to pick a processor model and search 2<sup>20</sup> serial numbers and 2<sup>24</sup> MAC addresses for an expected 2<sup>20</sup> &times; 2<sup>24</sup> &divide; 2 = 2<sup>43</sup> > 9 trillion searches.
+A future version of the driver may include an optional password. Further discussion is available on [Issue #1](https://github.com/adelyte/crescendo-cloud-driver/issues/1).
 
-An informed adversary could exploit a specific processor easily, but it is not clear that Crescendo Cloud creates <em>additional</em> security risk, especially against an adversary with physical access to the processor. Further discussion is available on [issue #1](https://github.com/adelyte/crescendo-cloud-driver/issues/1).
+#### ID as Password
+The processor model, serial number, and MAC address are concatenated to form a processor ID, which functions as a password. A naive adversary wishing to exploit a random processor would have to pick a processor model and search 2<sup>20</sup> serial numbers and 2<sup>24</sup> MAC addresses for an expected 2<sup>20</sup> &times; 2<sup>24</sup> &divide; 2 = 2<sup>43</sup> > 9 trillion searches.
+
+> NOTE: 2-Series processors do not have serial numbers accessible from the Crestron operating system, see [Issue #2](https://github.com/adelyte/crescendo-cloud-driver/issues/2).
+
+An informed adversary could exploit a specific processor easily, but it is not clear that Crescendo Cloud creates <em>additional</em> security risk, especially against an adversary with physical access to the processor.
