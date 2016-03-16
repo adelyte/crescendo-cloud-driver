@@ -7,13 +7,28 @@
 #CATEGORY "46" "Crescendo" // Custom
 #DEFAULT_VOLATILE
 #ENABLE_DYNAMIC
+
+// Compiler Settings
+// #DEFINE_CONSTANT #DEBUG 1   // Enable trace statements etc
+// #DEFINE_CONSTANT #DEVELOP 1 // Use staging server rather than production servers
+// #DEFINE_CONSTANT #EMBED 1   // Suppress properties incompatible with parameter substitution
+
+#IF_DEFINED #DEBUG
 #ENABLE_TRACE
+#ENABLE_STACK_CHECKING
+#ENDIF
 
+// Input/Output Sizes
+#DEFINE_CONSTANT #KEY_VALUE_SIZE    998
+#DEFINE_CONSTANT #KEY_VALUE_SIZEx2 1996
 
-// Constants
+// Server IP Addresses
+#IF_DEFINED #DEVELOP
+#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_SIZE 1
+#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_DEV "159.203.101.192"
+#ENDIF
 
-#DEFINE_CONSTANT #KEY_VALUE_SIZE 10
-
+#IF_NOT_DEFINED #DEVELOP
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_SIZE 10
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_AMS2 "82.196.14.206"
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_AMS3 "188.166.5.178"
@@ -25,32 +40,36 @@
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_SFO1 "104.236.165.117"
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_SGP1 "128.199.76.5"
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_TOR1 "159.203.30.228"
+#ENDIF
+
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_PORT 50000
 
+// Key:Value Protocol
 #DEFINE_CONSTANT #MESSAGE_DELIMITER "\x1F\x1E" // unit separator (^_) + record separator (^^)
 #DEFINE_CONSTANT #MESSAGE_KEY_DELIMITER ":\x1F " // colon + unit separator (^_) + space
 
 
 // Inputs and Outputs
 
-DIGITAL_INPUT  Connect, Disconnect;
-DIGITAL_OUTPUT Connected;
+DIGITAL_INPUT  Connect, Disconnect, _SKIP_;
+DIGITAL_OUTPUT Connected, _SKIP_, _SKIP_;
 
-DIGITAL_INPUT  Digital_Value_Is[#KEY_VALUE_SIZE];
-DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE];
+DIGITAL_INPUT  Digital_Value_Is[#KEY_VALUE_SIZE], _SKIP_;
+DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE], _SKIP_;
 
-STRING_OUTPUT ID;
-
-STRING_OUTPUT Console_Prompt, Console_Tx;
+STRING_OUTPUT Console_Tx;
 BUFFER_INPUT  Console_Rx[65534];
 
 STRING_INPUT  Cloud_Tx[255];
-STRING_OUTPUT Cloud_Rx;
+STRING_OUTPUT Cloud_Rx, _SKIP_, _SKIP_;
 
-ANALOG_INPUT  Analog_Value_Is[#KEY_VALUE_SIZE];
-ANALOG_OUTPUT Analog_Value[#KEY_VALUE_SIZE];
+STRING_INPUT  User_Program_Command[255], _SKIP_;
 
-STRING_INPUT Serial_Value_Is[#KEY_VALUE_SIZE][255];
+ANALOG_INPUT  Analog_Value_Is[#KEY_VALUE_SIZE], _SKIP_;
+STRING_OUTPUT Analog_Value[#KEY_VALUE_SIZE], _SKIP_; // Analog values are set with strings
+
+STRING_INPUT  Serial_Value_Is[#KEY_VALUE_SIZE][255];
+STRING_OUTPUT Serial_Value[#KEY_VALUE_SIZE];
 
 TCP_CLIENT Client[4095];
 
@@ -58,9 +77,31 @@ STRING_PARAMETER Project[32];
 STRING_PARAMETER Users[250];
 STRING_PARAMETER Server_Region[15];
 
-STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250];
-STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250];
+STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250], _SKIP_, _SKIP_, _SKIP_, _SKIP_, _SKIP_;
+STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250], _SKIP_;
 STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
+
+#IF_NOT_DEFINED #EMBED
+#BEGIN_PARAMETER_PROPERTIES Digital_Key
+
+  propValidUnits = unitString;
+  propDefaultValue = "";
+
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES Analog_Key
+
+  propValidUnits = unitString;
+  propDefaultValue = "";
+
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES Serial_Key
+
+  propValidUnits = unitString;
+  propDefaultValue = "";
+
+#END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES Server_Region
 
@@ -76,6 +117,199 @@ STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
     { "TOR", "Toronto"};
 
 #END_PARAMETER_PROPERTIES
+#ENDIF 
+
+
+// Hash Table
+/*
+Hash Table with Linear Probing
+  Benchmarks
+    RMC3: over 2,100 ops/sec for HashGet() vs 50 ops/sec for linear search
+    PRO2: over 1,600 ops/sec for HashGet() vs 65 ops/sec for linear search  
+
+Kernighan and Ritchie Hash Function
+  Benchmarks
+    RMC3: over 13,000 ops/sec
+    PRO2: over  1,700 ops/sec
+
+  Digital Hash Table: 998 keys, 27 collisions (2%) # sequential keys
+  Analog Hash Table:  396 keys, 68 collisions (17%)
+  Serial Hash Table:  297 keys, 25 collisions (8%)
+*/
+
+INTEGER_FUNCTION HashCode(STRING key)
+{
+    INTEGER i, hash;
+
+    IF(key = "")
+    {
+        RETURN(#KEY_VALUE_SIZEx2);
+    }
+
+    hash = 0;
+    FOR(i = 1 TO LEN(key))
+    {
+        hash = 31 * hash + BYTE(key, i); // multiplication is computed modulo
+    }
+
+    hash = hash UMOD #KEY_VALUE_SIZEx2; // lazy mod with slight bias to low values
+
+    RETURN(hash);
+}
+
+// NOTE: HashSet and HashGet could be generic if parameters were available to functions READONLYBYREF
+INTEGER __Digital_Key_Hash_Table__[#KEY_VALUE_SIZEx2];
+
+FUNCTION DigitalHashSet(STRING key, INTEGER value)
+{
+    INTEGER i, hash, slot;
+
+    hash = HashCode(key);
+    IF(hash = #KEY_VALUE_SIZEx2)
+    {
+        RETURN;
+    }
+
+    FOR(i = 0 TO #KEY_VALUE_SIZEx2 - 1)
+    {
+        slot = (hash + i) MOD #KEY_VALUE_SIZEx2;
+
+        IF(__Digital_Key_Hash_Table__[slot] = 0)
+        {
+            __Digital_Key_Hash_Table__[slot] = value;
+            BREAK;
+        }
+    }
+}
+
+INTEGER_FUNCTION DigitalHashGet(STRING key)
+{
+    INTEGER i, hash, slot, index;
+
+    hash = HashCode(key);
+    IF(hash = #KEY_VALUE_SIZEx2)
+    {
+        RETURN(#KEY_VALUE_SIZEx2);
+    }
+
+    FOR(i = 0 TO #KEY_VALUE_SIZEx2 - 1)
+    {
+        slot = (hash + i) MOD #KEY_VALUE_SIZEx2;
+        index = __Digital_Key_Hash_Table__[slot];
+
+        IF(index = 0)
+        {
+            RETURN(#KEY_VALUE_SIZEx2);
+        }
+
+        IF(Digital_Key[index] = key)
+        {
+            RETURN(index);
+        }
+    }
+}
+
+INTEGER __Analog_Key_Hash_Table__[#KEY_VALUE_SIZEx2];
+
+FUNCTION AnalogHashSet(STRING key, INTEGER value)
+{
+    INTEGER i, hash, slot;
+
+    hash = HashCode(key);
+    IF(hash = #KEY_VALUE_SIZEx2)
+    {
+        RETURN;
+    }
+
+    FOR(i = 0 TO #KEY_VALUE_SIZEx2 - 1)
+    {
+        slot = (hash + i) MOD #KEY_VALUE_SIZEx2;
+
+        IF(__Analog_Key_Hash_Table__[slot] = 0)
+        {
+            __Analog_Key_Hash_Table__[slot] = value;
+            BREAK;
+        }
+    }
+}
+
+INTEGER_FUNCTION AnalogHashGet(STRING key)
+{
+    INTEGER i, hash, slot, index;
+
+    hash = HashCode(key);
+    IF(hash = #KEY_VALUE_SIZEx2)
+    {
+        RETURN(#KEY_VALUE_SIZEx2);
+    }
+
+    FOR(i = 0 TO #KEY_VALUE_SIZEx2 - 1)
+    {
+        slot = (hash + i) MOD #KEY_VALUE_SIZEx2;
+        index = __Analog_Key_Hash_Table__[slot];
+
+        IF(index = 0)
+        {
+            RETURN(#KEY_VALUE_SIZEx2);
+        }
+
+        IF(Analog_Key[index] = key)
+        {
+            RETURN(index);
+        }
+    }
+}
+
+INTEGER __Serial_Key_Hash_Table__[#KEY_VALUE_SIZEx2];
+
+FUNCTION SerialHashSet(STRING key, INTEGER value)
+{
+    INTEGER i, hash, slot;
+
+    hash = HashCode(key);
+    IF(hash = #KEY_VALUE_SIZEx2)
+    {
+        RETURN;
+    }
+
+    FOR(i = 0 TO #KEY_VALUE_SIZEx2 - 1)
+    {
+        slot = (hash + i) MOD #KEY_VALUE_SIZEx2;
+
+        IF(__Serial_Key_Hash_Table__[slot] = 0)
+        {
+            __Serial_Key_Hash_Table__[slot] = value;
+            BREAK;
+        }
+    }
+}
+
+INTEGER_FUNCTION SerialHashGet(STRING key)
+{
+    INTEGER i, hash, slot, index;
+
+    hash = HashCode(key);
+    IF(hash = #KEY_VALUE_SIZEx2)
+    {
+        RETURN(#KEY_VALUE_SIZEx2);
+    }
+
+    FOR(i = 0 TO #KEY_VALUE_SIZEx2 - 1)
+    {
+        slot = (hash + i) MOD #KEY_VALUE_SIZEx2;
+        index = __Serial_Key_Hash_Table__[slot];
+
+        IF(index = 0)
+        {
+            RETURN(#KEY_VALUE_SIZEx2);
+        }
+
+        IF(Serial_Key[index] = key)
+        {
+            RETURN(index);
+        }
+    }
+}
 
 
 // Socket Functions
@@ -91,6 +325,10 @@ FUNCTION __Connect__()
     IF(status < 0)
     {
         TRACE("Crescendo Cloud: ERROR %d connecting socket to address '%s' on port  %u", status, Hosts[__Host__], #CRESCENDO_CLOUD_PORT);
+    }
+    ELSE
+    {
+        GENERATEUSERNOTICE("Crescendo Cloud: CONNECTED to address '%s' on port  %u", Hosts[__Host__], #CRESCENDO_CLOUD_PORT);
     }
 }
 
@@ -147,8 +385,12 @@ STRUCTURE SYSTEM
 {
     STRING model[16], firmware[30], serial_code[8];
     STRING system_key[32];
-    STRING mac_address[18], ip_address[15];
+    STRING mac_address[40], ip_address[40]; // may contain two addresses
     STRING uptime[20];
+    STRING program_runtime[30], program_path[1023], program_file[255];
+    STRING program_name[255], program_compiled_at[20];
+    STRING memory_free[10], memory_used[10];
+    STRING cpu_idle[6];
 };
 
 SYSTEM Processor;
@@ -181,33 +423,12 @@ FUNCTION SetVersion(STRING console)
     SendKeyValue("serial", Processor.serial_code);
     SendKeyValue("firmware", Processor.firmware);
     SendKeyValue("project", Project);
-  SendKeyValue("users", Users);
-}
-
-FUNCTION GetSystemKey()
-{
-    SendConsole("systemkey");
-}
-
-FUNCTION SetSystemKey(STRING console)
-{
-// EXAMPLE: 50846424c1d611d762d1ed53f52698db
-
-    INTEGER start, end, count;
-
-    start = 1;
-    end = FIND("\r", console);
-    count = end - start;
-    Processor.system_key = MID(console, start, count);
-
-    ID = Processor.system_key;
-
-    SendKeyValue("id", Processor.system_key);
+    SendKeyValue("users", Users);
 }
 
 FUNCTION GetProgCom()
 {
-
+    SendConsole("progcom");
 }
 
 FUNCTION SetProgCom(STRING console)
@@ -232,17 +453,45 @@ Include4.dat: 2.02.046
 
     INTEGER start, end, count;
 
-    start = FIND("", console) + 0;
-    end = FIND("", console);
-    count = end - start;    
+    start = FIND("Directory: ", console) + 11;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.program_runtime = MID(console, start, count);
+
+    start = FIND("Source File:  ", console) + 14;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.program_path = MID(console, start, count);
+
+    start = FIND("Program File: ", console) + 14;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.program_file = MID(console, start, count);
+
+    start = FIND("System Name:  ", console) + 14;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.program_name = MID(console, start, count);
+
+    start = FIND("Compiled On:  ", console) + 14;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.program_compiled_at = MID(console, start, count);
+
+    SendKeyValue("program-runtime", Processor.program_runtime);
+    SendKeyValue("program-path", Processor.program_path);
+    SendKeyValue("program-file", Processor.program_file);
+    SendKeyValue("program-name", Processor.program_name);
+    SendKeyValue("program-compiled-at", Processor.program_compiled_at);
 }
 
-FUNCTION GetIpConfig()
+#IF_SERIES3
+FUNCTION GetNetwork()
 {
     SendConsole("ipconfig");
 }
 
-FUNCTION SetIpConfig(STRING console)
+FUNCTION SetNetwork(STRING console)
 {
 /* EXAMPLE:
 Ethernet Adapter [LAN9217]:
@@ -273,6 +522,52 @@ Ethernet Adapter [LAN9217]:
     SendKeyValue("mac-address", Processor.mac_address);
     SendKeyValue("local-ip-address", Processor.ip_address);
 }
+#ENDIF
+
+#IF_SERIES2
+FUNCTION GetNetwork()
+{
+    SendConsole("est");
+}
+
+FUNCTION SetNetwork(STRING console)
+{
+/* EXAMPLE
+Ethernet Status: LAN A        LAN B
+  Link Status:   OK           No Link 
+  Link Speed:    100 Mbps     n/a
+  Full Duplex:   YES          n/a
+Ethernet Parameters:
+  Enabled:     On
+  MAC Address(es): 00.10.7f.37.5c.9b        NOT_FOUND
+  IP Address:  192.168.001.051    Not Loaded
+  Subnet Mask: 255.255.255.000    Not Loaded
+  Def Router : 192.168.001.001
+  DHCP:        Off
+  WINS:        Off
+  Host Name:   ADELYTEPRO2
+  Domain Name: (none entered)
+  SSL:         OFF,Off
+*/
+
+    INTEGER start, end, count;
+
+    // MAC Address
+    start = FIND("MAC Address(es).... : ", console) + 22;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.mac_address = MID(console, start, count);
+
+    // IP Address
+    start = FIND("IP Address ........ : ", console) + 22;
+    end = FIND("\n", console, start);
+    count = end - start;
+    Processor.ip_address = MID(console, start, count);
+
+    SendKeyValue("mac-address", Processor.mac_address);
+    SendKeyValue("local-ip-address", Processor.ip_address);
+}
+#ENDIF
 
 FUNCTION GetUptime()
 {
@@ -294,8 +589,8 @@ The system last started on: Sunday, December 06, 2015 at 14:36:36
     count = end - start;
     days = MID(console, start, count);
 
-    start = end + 1;
-    end = FIND("\r\n", console, start);
+    start = end + 6;
+    end = FIND("\n", console, start);
     count = end - start;
     timestamp = MID(console, start, count);
 
@@ -303,6 +598,113 @@ The system last started on: Sunday, December 06, 2015 at 14:36:36
 
     SendKeyValue("uptime", Processor.uptime);
 }
+
+#IF_SERIES3
+FUNCTION GetMemory()
+{
+    SendConsole("ramfree");
+}
+
+FUNCTION SetMemory(STRING console)
+{
+/* EXAMPLE
+38 percent of memory in use
+199446528 total bytes of physical memory
+75534336 bytes actually used
+123912192 bytes free
+0 bytes reclaimable
+*/
+
+    INTEGER start, end, count;
+
+    start = FIND("physical memory\n", console) + 17;
+    end = FIND(" bytes actually used\n", console);
+    count = end - start;
+    Processor.memory_used = MID(console, start, count);
+
+    start = FIND("\n", console, end) + 2;
+    end = FIND(" bytes free\n", console);
+    count = end - start;
+    Processor.memory_free = MID(console, start, count);
+
+    SendKeyValue("memory-free", Processor.memory_free);
+    SendKeyValue("memory-used", Processor.memory_used);
+}
+
+FUNCTION GetLoad()
+{
+    SendConsole("cpuload");
+}
+
+FUNCTION SetLoad(STRING console)
+{
+/* EXAMPLE
+CPU:LOAD 4%
+*/
+    INTEGER load;
+
+    load = ATOI(console);
+    Processor.cpu_idle = ITOA(100 - load);
+
+    SendKeyValue("cpu-idle", Processor.cpu_idle);
+}
+#ENDIF
+
+#IF_SERIES2
+FUNCTION GetMemory()
+{
+    SendConsole("heapfree");
+}
+
+FUNCTION SetMemory(STRING console)
+{
+/* EXAMPLE
+42427372 bytes free
+24681492 bytes used
+Blk starts at 81DC0D9C
+*/
+
+    INTEGER start, end, count;
+
+    start = 1;
+    end = FIND(" bytes free\n", console);
+    count = end - start;
+    Processor.memory_free = MID(console, start, count);
+
+    start = FIND("\n", console, end) + 2;
+    end = FIND(" bytes used\n", console);
+    count = end - start;
+    Processor.memory_used = MID(console, start, count);
+
+    SendKeyValue("memory-free", Processor.memory_free);
+    SendKeyValue("memory-used", Processor.memory_used);
+}
+
+FUNCTION GetLoad()
+{
+    SendConsole("top");
+}
+
+FUNCTION SetLoad(STRING console)
+{
+/* EXAMPLE
+Sorting...
+
+thread=ReaLIdle	utilization=99.56%
+thread=TCP_Read	utilization=0.2%
+thread=ERR TASK	utilization=0.2%
+*/
+
+    INTEGER start, end, count;
+
+    start = FIND("thread=ReaLIdle	utilization=", console) + 30;
+    end = FIND("%\n", console, start);
+    count = end - start;
+    Processor.cpu_idle = MID(console, start, count);
+
+    SendKeyValue("cpu-idle", Processor.cpu_idle);
+}
+#ENDIF
 
 FUNCTION SetKeyValues()
 {
@@ -312,26 +714,39 @@ FUNCTION SetKeyValues()
   {
     IF(Digital_Key[index] != "")
     {
-      IF(Digital_Value_Is[index])
-      {
-          SendKeyValue(Digital_Key[index], "true");
-      }
-      ELSE
-      {
+        IF(Digital_Value_Is[index])
+        {
+            SendKeyValue(Digital_Key[index], "true");
+        }
+        ELSE
+        {
             SendKeyValue(Digital_Key[index], "false");
-      }
+        }
     }
 
     IF(Analog_Key[index] != "")
     {
-          SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
+        SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
     }
 
     IF(Serial_Key[index] != "")
     {
-          SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+        SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
     }
   }
+}
+
+FUNCTION Heartbeat()
+{
+    SendKeyValue("updated", TIME());
+
+    WAIT(6000, __Wait_Heartbeat__)
+    {
+        Heartbeat();
+    }
+
+    GetMemory();
+    GetLoad();
 }
 
 STRING __Prompt__[16];
@@ -340,14 +755,13 @@ CHANGE Console_Rx
 {
     STRING rx[4095], prompt[16];
 
-  IF(__Prompt__ = "")
-  {
-      __Prompt__ = REMOVE(">", Console_Rx);
-    Console_Prompt = __Prompt__;
+    IF(__Prompt__ = "")
+    {
+        __Prompt__ = REMOVE(">", Console_Rx);
+        GENERATEUSERNOTICE("Crescendo Cloud: PROMPT is '%s'", __Prompt__);
 
-    CLEARBUFFER(Console_Rx);
-    TERMINATEEVENT;
-  }
+        TERMINATEEVENT;
+    }
 
     rx = GATHER(__Prompt__, Console_Rx);
     rx = LEFT(rx, LEN(rx) - LEN(__Prompt__)); // Trim Prompt
@@ -360,31 +774,55 @@ CHANGE Console_Rx
     IF(__Console_Tx__ = "ver")
     {
         SetVersion(rx);
-        GetIpConfig();
+        GetNetwork();
     }
     ELSE IF(__Console_Tx__ = "ipconfig")
     {
-        SetIpConfig(rx);
+        SetNetwork(rx);
+        GetProgCom();
+    }
+    ELSE IF(__Console_Tx__ = "progcom")
+    {
+        SetProgCom(rx);
         GetUptime();
     }
     ELSE IF(__Console_Tx__ = "uptime")
     {
         SetUptime(rx);
-    SetKeyValues();
+        Heartbeat();
+        SetKeyValues();
     }
     ELSE
     {
-        SendKeyValue(__Console_Tx__, rx);
-    }
-}
-
-FUNCTION Heartbeat()
-{
-  SendKeyValue("updated", TIME());
-
-    WAIT(6000, __Wait_Heartbeat__)
-    {
-        Heartbeat();
+        // NOTE: the compiler does not allow the `ELSE IF` statements to be placed inline
+	    #IF_SERIES3
+	    IF(__Console_Tx__ = "ramfree")
+	    {
+	        SetMemory(rx);
+	    }
+	    ELSE IF(__Console_Tx__ = "cpuload")
+	    {
+	        SetLoad(rx);
+	    }
+        ELSE
+        {
+            SendKeyValue(__Console_Tx__, rx);
+        }
+	    #ENDIF
+	    #IF_SERIES2
+	    IF(__Console_Tx__ = "heapfree")
+	    {
+	        SetMemory(rx);
+	    }
+	    ELSE IF(__Console_Tx__ = "top")
+	    {
+	        SetLoad(rx);
+	    }
+        ELSE
+        {
+            SendKeyValue(__Console_Tx__, rx);
+        }
+	    #ENDIF
     }
 }
 
@@ -399,12 +837,33 @@ CHANGE Cloud_Tx
 
 // Socket Events
 
+FUNCTION __Init__()
+{
+    INTEGER i;
+
+    // Get Console Prompt
+    SendConsoleDirect("", "\r");
+
+    // Hash Table Initialization
+    SETARRAY(__Digital_Key_Hash_Table__, 0);
+    SETARRAY(__Analog_Key_Hash_Table__, 0);
+    SETARRAY(__Serial_Key_Hash_Table__, 0);
+
+    FOR(i = 1 TO #KEY_VALUE_SIZE)
+    {
+        DigitalHashSet(Digital_Key[i], i);
+        AnalogHashSet(Analog_Key[i], i);
+        SerialHashSet(Serial_Key[i], i);
+    }
+
+    GetVersion();
+}
+
 SOCKETCONNECT Client
 {
     Connected = 1;
     
-    GetVersion();
-    Heartbeat();
+    __Init__();
 }
 
 SOCKETDISCONNECT Client
@@ -423,11 +882,11 @@ SOCKETSTATUS Client
     CSWITCH(status)
     {
         CASE(3): // Connection failed
-        CASE(5): // Connection broken locally
+        CASE(4): // Connection broken remotely
         {
-			__Host__ = (__Host__ + 1) MOD #CRESCENDO_CLOUD_HOST_SIZE;
+            __Host__ = (__Host__ + 1) MOD #CRESCENDO_CLOUD_HOST_SIZE;
 
-			__Connect__();
+            __Connect__();
         }
     }
 }
@@ -436,9 +895,30 @@ SOCKETSTATUS Client
 INTEGER __Parsing__;
 STRING __Rx_Buffer__[65534];
 
+INTEGER_FUNCTION IsNumber(STRING text)
+{
+    INTEGER i, char;
+
+    IF(LEN(text) > 5)
+    {
+        RETURN(0);
+    }
+
+    FOR(i = 1 TO LEN(text))
+    {
+        char = BYTE(text, i);
+        IF(char < '0' || '9' < char)
+        {
+            RETURN(0);
+        } 
+    }
+
+    RETURN(1);
+}
+
 SOCKETRECEIVE Client
 {
-    INTEGER i;
+    INTEGER i, value;
     STRING rx[255], key[250];
 
     TRACE("Crescendo Cloud: SocketRxBuf: '%s'", Client.SocketRxBuf);
@@ -457,57 +937,69 @@ SOCKETRECEIVE Client
     {
         rx = REMOVE(#MESSAGE_DELIMITER, __Rx_Buffer__);
 
-      TRACE("Crescendo Cloud: rx: '%s'", rx);
-      rx = LEFT(rx, LEN(rx) - 2); // trim delimiter
+        TRACE("Crescendo Cloud: rx: '%s'", rx);
+        rx = LEFT(rx, LEN(rx) - 2); // trim delimiter
   
-      Cloud_Rx = rx;
+        #IF_DEFINED #DEBUG
+        Cloud_Rx = rx;
+        #ENDIF
   
-      key = REMOVE(#MESSAGE_KEY_DELIMITER, rx);
-      key = LEFT(key, LEN(key) - 3); // trim delimiter
+        key = REMOVE(#MESSAGE_KEY_DELIMITER, rx);
+        key = LEFT(key, LEN(key) - 3); // trim delimiter
   
-      TRACE("Crescendo Cloud: key:value %s:%s", key, rx);
+        TRACE("Crescendo Cloud: key:value %s:%s", key, rx);
   
-      IF("shell" = LEFT(key, 5))
-      {
-          SendConsoleDirect(key, rx);
-      }
-      ELSE
+        IF("shell" = LEFT(key, 5))
         {
-      IF(rx = "true")
-      {
-          FOR(i = 1 TO #KEY_VALUE_SIZE)
-          {
-                  IF("" = Digital_Key[i])
-                  {
-                      BREAK;
-                  }
-  
-              IF(key = Digital_Key[i])
-              {
-                  Digital_Value[i] = 1;
-                  PROCESSLOGIC();
-                  Digital_Value[i] = 0;
-
-                  BREAK;
-              }
-          }
-      }
-      ELSE
-      {
-              FOR(i = 1 TO #KEY_VALUE_SIZE)
-        {
-                  IF("" = Analog_Key[i])
-          {
-            BREAK;
-          }
-
-          IF(key = Analog_Key[i])
-          {
-                      Analog_Value[i] = ATOI(rx);
-            BREAK;
-          }
+            SendConsoleDirect(key, rx);
         }
-      }
+        ELSE
+        {
+            IF(rx = "true" || rx = "false" || rx = "pulse")
+            {
+                i = DigitalHashGet(key);
+                IF(i <= #KEY_VALUE_SIZE)
+                {
+                    IF(rx = "true")
+                    {
+                        Digital_Value[i] = 1;
+                    }
+                    ELSE IF(rx = "false")
+                    {
+                        Digital_Value[i] = 0;
+                    }
+                    ELSE
+                    {
+                        Digital_Value[i] = 1;
+                        PROCESSLOGIC();
+                        Digital_Value[i] = 0;
+                    }
+                }
+            }
+            ELSE IF(IsNumber(rx))
+            {
+                i = AnalogHashGet(key);
+                IF(i <= #KEY_VALUE_SIZE)
+                {
+                    value = ATOI(rx);
+                    IF(value > 255)
+                    {
+                        MAKESTRING(Analog_Value[i], "%c%c", HIGH(value), LOW(value));
+                    }
+                    ELSE
+                    {
+                        MAKESTRING(Analog_Value[i], "%c", value);
+                    }
+                }
+            }
+            ELSE
+            {
+                i = SerialHashGet(key);
+                IF(i <= #KEY_VALUE_SIZE)
+                {
+                    Serial_Value[i] = rx;
+                }
+            }
         }
 
         PROCESSLOGIC();
@@ -527,7 +1019,10 @@ PUSH Digital_Value_Is
 
     TRACE("Digital_Value_Is[%u] true", index);
 
-    SendKeyValue(Digital_Key[index], "true");
+    IF(Connected)
+    {
+        SendKeyValue(Digital_Key[index], "true");
+    }
 }
 
 RELEASE Digital_Value_Is
@@ -538,7 +1033,10 @@ RELEASE Digital_Value_Is
 
     TRACE("Digital_Value_Is[%u] false", index);
 
-    SendKeyValue(Digital_Key[index], "false");
+    IF(Connected)
+    {
+        SendKeyValue(Digital_Key[index], "false");
+    }
 }
 
 CHANGE Analog_Value_Is
@@ -549,7 +1047,10 @@ CHANGE Analog_Value_Is
 
     TRACE("Analog_Value_Is[%u] = %u", index, Analog_Value_Is[index]);
 
-    SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
+    IF(Connected)
+    {
+        SendKeyValue(Analog_Key[index], ITOA(LOW(Analog_Value_Is[index]))); // FIXME: hack route to ID
+    }
 }
 
 CHANGE Serial_Value_Is
@@ -560,7 +1061,10 @@ CHANGE Serial_Value_Is
 
     TRACE("Serial_Value_Is[%u] = '%s'", index, Serial_Value_Is[index]);
 
-    SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+    IF(Connected)
+    {
+        SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+    }
 }
 
 
@@ -578,17 +1082,232 @@ PUSH Disconnect
     SOCKETDISCONNECTCLIENT(Client);
 }
 
+FUNCTION __Inspect__()
+{
+    INTEGER i, j, hash, slot,
+            digital_keys, digital_collisions,
+            analog_keys, analog_collisions,
+            serial_keys, serial_collisions;
+    STRING key[255], match[2];
+
+    digital_keys = 0;
+    digital_collisions = 0;
+    analog_keys = 0;
+    analog_collisions = 0;
+    serial_keys = 0;
+    serial_collisions = 0;
+
+    PRINT("Param Hash    Slot    | Key\n"); 
+    FOR(i = 1 TO #KEY_VALUE_SIZE)
+    {
+        key = Digital_Key[i];
+        IF(key != "")
+        {
+            digital_keys = digital_keys + 1;
+	        hash = HashCode(key);
+	
+	        match = "==";
+		    FOR(j = 0 TO #KEY_VALUE_SIZEx2 - 1)
+		    {
+		        slot = (hash + j) MOD #KEY_VALUE_SIZEx2;
+		
+		        IF(i = __Digital_Key_Hash_Table__[slot])
+		        {
+		            BREAK;
+		        }
+		    }
+
+            IF(slot != hash)
+            {
+                match = "<>";
+                digital_collisions = digital_collisions + 1;
+            }
+	
+	        PRINT("D-%03u %04u %s %04u +%u | %s\n", i, hash, match, slot, j, key);
+        }
+    }
+
+    FOR(i = 1 TO #KEY_VALUE_SIZE)
+    {
+        key = Analog_Key[i];
+        IF(key != "")
+        {
+            analog_keys = analog_keys + 1;
+	        hash = HashCode(key);
+	
+	        match = "==";
+		    FOR(j = 0 TO #KEY_VALUE_SIZEx2 - 1)
+		    {
+		        slot = (hash + j) MOD #KEY_VALUE_SIZEx2;
+		
+		        IF(i = __Analog_Key_Hash_Table__[slot])
+		        {
+		            BREAK;
+		        }
+		    }
+
+            IF(slot != hash)
+            {
+                match = "<>";
+                analog_collisions = analog_collisions + 1;
+            }
+	
+	        PRINT("A-%03u %04u %s %04u +%u | %s\n", i, hash, match, slot, j, key);
+        }
+    }
+
+    FOR(i = 1 TO #KEY_VALUE_SIZE)
+    {
+        key = Serial_Key[i];
+        IF(key != "")
+        {
+            serial_keys = serial_keys + 1;
+	        hash = HashCode(key);
+	
+	        match = "==";
+		    FOR(j = 0 TO #KEY_VALUE_SIZEx2 - 1)
+		    {
+		        slot = (hash + j) MOD #KEY_VALUE_SIZEx2;
+		
+		        IF(i = __Serial_Key_Hash_Table__[slot])
+		        {
+		            BREAK;
+		        }
+		    }
+
+            IF(slot != hash)
+            {
+                match = "<>";
+                serial_collisions = serial_collisions + 1;
+            }
+	
+	        PRINT("S-%03u %04u %s %04u +%u | %s\n", i, hash, match, slot, j, key);
+        }
+    }
+
+    IF(digital_keys > 0)
+    {
+        PRINT("Digital Hash Table: %u keys, %u collisions (%u%%)\n", digital_keys, digital_collisions, MULDIV(digital_collisions, 100, digital_keys));
+    }
+
+    IF(analog_keys > 0)
+    {
+        PRINT("Analog Hash Table:  %u keys, %u collisions (%u%%)\n", analog_keys, analog_collisions, MULDIV(analog_collisions, 100, analog_keys));
+    }
+
+    IF(serial_keys > 0)
+    {
+        PRINT("Serial Hash Table:  %u keys, %u collisions (%u%%)\n", serial_keys, serial_collisions, MULDIV(serial_collisions, 100, serial_keys));
+    }
+}
+
+CHANGE User_Program_Command
+{
+    INTEGER i, j, hash, start, end, benchmark;
+    STRING key[255];
+
+    IF(User_Program_Command = "cloud inspect")
+    {
+        __Inspect__();
+    }
+    ELSE IF(User_Program_Command = "cloud inspect all")
+    {
+        PRINT("\nStarting Inspection ...\n");
+        __Init__();
+        __Inspect__();
+    }
+    ELSE IF(User_Program_Command = "cloud benchmark")
+    {
+        PRINT("\nStarting Benchmark ...\n");
+
+        start = GETHSECONDS();
+        FOR(i = 1 TO 30000)
+        {
+            hash = HashCode("benchmark-this-key-74");
+        }
+        end = GETHSECONDS();
+
+        IF(end > start)
+        {
+            benchmark = end - start;
+        }
+        ELSE
+        {
+            benchmark = (65535 - start + 1) + end;
+        }
+        PRINT("HashCode('benchmark-this-key-74') 30,000 times in %u hsecs\n", benchmark);
+
+        start = GETHSECONDS();
+        FOR(i = 1 TO 30000)
+        {
+            hash = DigitalHashGet(Digital_Key[RANDOM(1, 998)]);
+        }
+        end = GETHSECONDS();
+
+        IF(end > start)
+        {
+            benchmark = end - start;
+        }
+        ELSE
+        {
+            benchmark = (65535 - start + 1) + end;
+        }
+        PRINT("DigitalHashGet() 30,000 times in %u hsecs\n", benchmark);
+
+        start = GETHSECONDS();
+        FOR(i = 1 TO 3000)
+        {
+            key = Digital_Key[RANDOM(1, 998)];
+
+            FOR(j = 1 TO #KEY_VALUE_SIZE)
+            {
+                IF(Digital_Key[j] = key)
+                {
+                    BREAK;
+                }
+            }
+        }
+        end = GETHSECONDS();
+
+        IF(end > start)
+        {
+            benchmark = end - start;
+        }
+        ELSE
+        {
+            benchmark = (65535 - start + 1) + end;
+        }
+        PRINT("FindKey() 3000 times in %u hsecs\n", benchmark);
+    }
+    ELSE IF(User_Program_Command = "cloud init")
+    {
+        __Init__();
+    }
+    ELSE IF(LEFT(User_Program_Command, 10) = "cloud hash")
+    {
+        key = RIGHT(User_Program_Command, LEN(User_Program_Command) - 11);
+        hash = HashCode(key);
+        PRINT("cloud hash is %04u\n", hash);
+    }
+}
+
 FUNCTION Main()
 {
     STRING regions[7][3];
-    INTEGER i, permutation;
+    INTEGER permutation;
 
+    __Host__ = 0;
     __Parsing__ = 0;
     __Prompt__ = "";
     __Rx_Buffer__ = "";
 
     WAITFORINITIALIZATIONCOMPLETE();
 
+    #IF_DEFINED #DEVELOP
+    Hosts[0] = #CRESCENDO_CLOUD_HOST_DEV;
+    #ENDIF
+
+    #IF_NOT_DEFINED #DEVELOP
     // Client-side Load Balancing
     permutation = RANDOM(1, 6);
 
@@ -1222,9 +1941,5 @@ FUNCTION Main()
             }
         }
     }
-
-    __Host__ = 0;
-
-    // Get Console Prompt
-    SendConsoleDirect("", "\r");
+    #ENDIF
 }
