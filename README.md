@@ -27,7 +27,7 @@ A future version of the driver may include an optional password. Further discuss
 #### ID as Password
 The processor model, serial number, and MAC address are concatenated to form a processor ID, which functions as a password. 
 
-Our processor sample set has a range of over 30 processor models (2<sup>5</sup), 10 million serial numbers (2<sup>22</sup>), and 4 million MAC addresses (2<sup>21</sup>). Entropy is reduced by a correlation between the uppermost four bits of the MAC address with a serial number (-2<sup>4</sup>). A naive adversary wishing to exploit a random processor out of _n_ total processors would have to to search 2<sup>5</sup> &times; 2<sup>22</sup> &times; 2<sup>21</sup> &divide; 2<sup>4</sup> &divide; _n_ &divide; 2 = 2<sup>5 + 22 + 21 - 4 - log<sub>2</sub>_n_ - 1</sup> = 2<sup>43 - log<sub>2</sub>_n_</sup> locations on average for a single exploit.
+Our processor sample set has a range of over 30 processor models (2<sup>5</sup>), 10 million serial numbers (2<sup>22</sup>), and 4 million MAC addresses (2<sup>21</sup>). Entropy is reduced by a correlation between the uppermost four bits of the MAC address with a serial number (-2<sup>4</sup>). A naive adversary wishing to exploit a random processor out of _n_ total processors would have to to search 2<sup>5</sup> &times; 2<sup>22</sup> &times; 2<sup>21</sup> &divide; 2<sup>4</sup> &divide; _n_ &divide; 2 = 2<sup>5 + 22 + 21 - 4 - log<sub>2</sub>_n_ - 1</sup> = 2<sup>43 - log<sub>2</sub>_n_</sup> locations on average for a single exploit.
 
 > NOTE: 2-Series processors do not have serial numbers accessible from the Crestron operating system, see [Issue #2](https://github.com/adelyte/crescendo-cloud-driver/issues/2).
 
