@@ -54,6 +54,11 @@
 DIGITAL_INPUT  Connect, Disconnect, _SKIP_;
 DIGITAL_OUTPUT Connected, _SKIP_, _SKIP_;
 
+#IF_SERIES2
+DIGITAL_INPUT  _SKIP_;
+DIGITAL_OUTPUT _SKIP_;
+#ENDIF
+
 DIGITAL_INPUT  Digital_Value_Is[#KEY_VALUE_SIZE], _SKIP_;
 DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE], _SKIP_;
 
@@ -76,45 +81,62 @@ TCP_CLIENT Client[4095];
 STRING_PARAMETER Project[32];
 STRING_PARAMETER Users[250];
 STRING_PARAMETER Server_Region[15];
+#IF_SERIES2
+STRING_PARAMETER Serial_Code[8];
+#ENDIF
 
 STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250], _SKIP_, _SKIP_, _SKIP_, _SKIP_, _SKIP_;
 STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250], _SKIP_;
 STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
 
 #IF_NOT_DEFINED #EMBED
+#BEGIN_PARAMETER_PROPERTIES Server_Region
+
+    propValidUnits = unitString;
+    propDefaultValue = "NYC";
+    propList =
+      { "AMS", "Amsterdam" },
+      { "FRA", "Frankfurt"},
+      { "LON", "London"},
+      { "NYC", "New York"},
+      { "SFO", "San Francisco"},
+      { "SGP", "Singapore"},
+      { "TOR", "Toronto"};
+
+#END_PARAMETER_PROPERTIES
+
+#IF_SERIES2
+#BEGIN_PARAMETER_PROPERTIES Serial_Code
+
+    propValidUnits = unitString;
+    propDefaultValue = "00000000";
+    propShortDescription = "Eight-character, zero-padded hexadecimal serial code, e.g. '00765E2F'.";
+
+#END_PARAMETER_PROPERTIES
+#ELSE
+#ENDIF
+
 #BEGIN_PARAMETER_PROPERTIES Digital_Key
 
-  propValidUnits = unitString;
-  propDefaultValue = "";
+    propValidUnits = unitString;
+    propDefaultValue = "";
+    propShortDescription = "Invalid character are . $ # [ ] / and ASCII control characters 0-31 and 127.";
 
 #END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES Analog_Key
 
-  propValidUnits = unitString;
-  propDefaultValue = "";
+    propValidUnits = unitString;
+    propDefaultValue = "";
+    propShortDescription = "Invalid character are . $ # [ ] / and ASCII control characters 0-31 and 127.";
 
 #END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES Serial_Key
 
-  propValidUnits = unitString;
-  propDefaultValue = "";
-
-#END_PARAMETER_PROPERTIES
-
-#BEGIN_PARAMETER_PROPERTIES Server_Region
-
-  propValidUnits = unitString;
-  propDefaultValue = "NYC";
-  propList =
-    { "AMS", "Amsterdam" },
-    { "FRA", "Frankfurt"},
-    { "LON", "London"},
-    { "NYC", "New York"},
-    { "SFO", "San Francisco"},
-    { "SGP", "Singapore"},
-    { "TOR", "Toronto"};
+    propValidUnits = unitString;
+    propDefaultValue = "";
+    propShortDescription = "Invalid character are . $ # [ ] / and ASCII control characters 0-31 and 127.";
 
 #END_PARAMETER_PROPERTIES
 #ENDIF 
@@ -414,10 +436,14 @@ FUNCTION SetVersion(STRING console)
     Processor.firmware = MID(console, start, count);
 
     // Serial Code
+    #IF_SERIES3
     start = FIND(", #", console) + 3;
     end = FIND("]", console, start);
     count = end - start;
     Processor.serial_code = MID(console, start, count);
+    #ELSE
+    Processor.serial_code = Serial_Code;
+    #ENDIF
 
     SendKeyValue("model", Processor.model);
     SendKeyValue("serial", Processor.serial_code);
@@ -522,9 +548,7 @@ Ethernet Adapter [LAN9217]:
     SendKeyValue("mac-address", Processor.mac_address);
     SendKeyValue("local-ip-address", Processor.ip_address);
 }
-#ENDIF
-
-#IF_SERIES2
+#ELSE
 FUNCTION GetNetwork()
 {
     SendConsole("est");
@@ -648,9 +672,7 @@ CPU:LOAD 4%
 
     SendKeyValue("cpu-idle", Processor.cpu_idle);
 }
-#ENDIF
-
-#IF_SERIES2
+#ELSE
 FUNCTION GetMemory()
 {
     SendConsole("heapfree");
@@ -808,8 +830,7 @@ CHANGE Console_Rx
         {
             SendKeyValue(__Console_Tx__, rx);
         }
-	    #ENDIF
-	    #IF_SERIES2
+	    #ELSE
 	    IF(__Console_Tx__ = "heapfree")
 	    {
 	        SetMemory(rx);
