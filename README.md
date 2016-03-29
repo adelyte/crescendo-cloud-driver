@@ -1,6 +1,17 @@
 # Crescendo Cloud Driver
 [Crescendo Cloud](https://crescendo.cloud) driver for Crestron control systems
 
+## Getting Started
+To keep the module inputs, outputs, and parameters neatly aligned, the driver is not wrapped in a user macro, which would force all the parameters to the bottom of the module. However, there a few SIMPL symbols the driver depends on that need to be added to the program along with the driver.
+
+1. Clone or download this repository.
+2. Copy `Crescendo Cloud.usp` to your program directory, which will make it available as a project module.
+3. Open `Crescendo Cloud.smw` in SIMPL Windows.
+4. Copy the Crescendo Cloud folder from the Crescendo Cloud program.
+5. Paste the folder into your program.
+
+This will provide a completely linked module, neatly aligned and ready for custom integration.
+
 ## Performance
 The Crescendo Cloud driver is a high-performance standalone SIMPL+ module. With default settings, it supports 998 `digital`, `analog`, and `serial` key:value pairs. These can be reduced for a (slight) performance increase or expanded if more values are needed:
 
