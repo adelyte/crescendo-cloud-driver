@@ -1652,7 +1652,7 @@
   ParamSigType2=String
   ParamCue3=Users
   ParamSigType3=String
-  ParamCue4=Server_Region,AMS,FRA,LON,NYC,SFO,SGP,TOR
+  ParamCue4=Server_Region,AMS,BLR,FRA,LON,NYC,SFO,SGP,TOR
   ParamSigType4=List
   ParamCue5=Serial_Code
   ParamSigType5=String
@@ -3520,21 +3520,23 @@
   DV=NYC
   NoS=False
   VVS=2
-  VN=7
+  VN=8
   Val1=AMS
   Lbl1=Amsterdam
-  Val2=FRA
-  Lbl2=Frankfurt
-  Val3=LON
-  Lbl3=London
-  Val4=NYC
-  Lbl4=New York
-  Val5=SFO
-  Lbl5=San Francisco
-  Val6=SGP
-  Lbl6=Singapore
-  Val7=TOR
-  Lbl7=Toronto
+  Val2=BLR
+  Lbl2=Bangalore
+  Val3=FRA
+  Lbl3=Frankfurt
+  Val4=LON
+  Lbl4=London
+  Val5=NYC
+  Lbl5=New York
+  Val6=SFO
+  Lbl6=San Francisco
+  Val7=SGP
+  Lbl7=Singapore
+  Val8=TOR
+  Lbl8=Toronto
 [END]
 [BEGIN]
   ObjTp=Dp
