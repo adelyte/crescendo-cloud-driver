@@ -8,9 +8,11 @@
 #DEFAULT_VOLATILE
 #ENABLE_DYNAMIC
 
+#DEFINE_CONSTANT #VERSION "1.1.0"
+
 // Compiler Settings
-// #DEFINE_CONSTANT #DEBUG 1   // Enable trace statements etc
-// #DEFINE_CONSTANT #DEVELOP 1 // Use staging server rather than production servers
+#DEFINE_CONSTANT #DEBUG 1   // Enable trace statements etc
+#DEFINE_CONSTANT #DEVELOP 1 // Use staging server rather than production servers
 // #DEFINE_CONSTANT #EMBED 1   // Suppress properties incompatible with parameter substitution
 
 #IF_DEFINED #DEBUG
@@ -19,13 +21,14 @@
 #ENDIF
 
 // Input/Output Sizes
-#DEFINE_CONSTANT #KEY_VALUE_SIZE    998
-#DEFINE_CONSTANT #KEY_VALUE_SIZEx2 1996
+#DEFINE_CONSTANT #KEY_VALUE_SIZE    198
+#DEFINE_CONSTANT #KEY_VALUE_SIZEx2  396
+// #DEFINE_CONSTANT #KEY_VALUE_ENABLE    1 // Compile with optional Enable inputs
 
 // Server IP Addresses
 #IF_DEFINED #DEVELOP
 #DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_SIZE 1
-#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_DEV "159.203.101.192"
+#DEFINE_CONSTANT #CRESCENDO_CLOUD_HOST_DEV "192.168.1.102" // "159.203.101.192"
 #ENDIF
 
 #IF_NOT_DEFINED #DEVELOP
@@ -59,6 +62,13 @@ DIGITAL_INPUT  _SKIP_;
 DIGITAL_OUTPUT _SKIP_;
 #ENDIF
 
+#IF_DEFINED #KEY_VALUE_ENABLE
+DIGITAL_INPUT Enable_Digital_Key[#KEY_VALUE_SIZE], _SKIP_,
+              _SKIP_, _SKIP_, _SKIP_,
+              Enable_Analog_Key[#KEY_VALUE_SIZE], _SKIP_,
+              Enable_Serial_Key[#KEY_VALUE_SIZE], _SKIP_;
+#ENDIF
+
 DIGITAL_INPUT  Digital_Value_Is[#KEY_VALUE_SIZE], _SKIP_;
 DIGITAL_OUTPUT Digital_Value[#KEY_VALUE_SIZE], _SKIP_;
 
@@ -66,7 +76,10 @@ STRING_OUTPUT Console_Tx;
 BUFFER_INPUT  Console_Rx[65534];
 
 STRING_INPUT  Cloud_Tx[255];
-STRING_OUTPUT Cloud_Rx, _SKIP_, _SKIP_;
+STRING_OUTPUT Cloud_Rx, _SKIP_;
+#IF_NOT_DEFINED #KEY_VALUE_ENABLE
+STRING_OUTPUT _SKIP_;
+#ENDIF
 
 STRING_INPUT  User_Program_Command[255], _SKIP_;
 
@@ -85,7 +98,11 @@ STRING_PARAMETER Server_Region[15];
 STRING_PARAMETER Serial_Code[8];
 #ENDIF
 
-STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250], _SKIP_, _SKIP_, _SKIP_, _SKIP_, _SKIP_;
+STRING_PARAMETER Digital_Key[#KEY_VALUE_SIZE][250], _SKIP_, _SKIP_, _SKIP_, _SKIP_;
+#IF_NOT_DEFINED #KEY_VALUE_ENABLE
+STRING_PARAMETER _SKIP_;
+#ENDIF
+
 STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250], _SKIP_;
 STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
 
@@ -104,18 +121,19 @@ STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
       { "TOR", "Toronto"};
 
 #END_PARAMETER_PROPERTIES
+#ENDIF
 
 #IF_SERIES2
 #BEGIN_PARAMETER_PROPERTIES Serial_Code
 
     propValidUnits = unitString;
     propDefaultValue = "00000000";
-    propShortDescription = "Eight-character, zero-padded hexadecimal serial code, e.g. '00765E2F'.";
+    propShortDescription = "Eight-character, zero-padded serial code, e.g. '01234567'.";
 
 #END_PARAMETER_PROPERTIES
-#ELSE
 #ENDIF
 
+#IF_NOT_DEFINED #EMBED
 #BEGIN_PARAMETER_PROPERTIES Digital_Key
 
     propValidUnits = unitString;
@@ -445,6 +463,7 @@ FUNCTION SetVersion(STRING console)
     Processor.serial_code = Serial_Code;
     #ENDIF
 
+    SendKeyValue("driver", #VERSION);
     SendKeyValue("model", Processor.model);
     SendKeyValue("serial", Processor.serial_code);
     SendKeyValue("firmware", Processor.firmware);
@@ -520,15 +539,21 @@ FUNCTION GetNetwork()
 FUNCTION SetNetwork(STRING console)
 {
 /* EXAMPLE:
-Ethernet Adapter [LAN9217]:
-      Link Status ....... : OK 
-      DHCP .............. : OFF 
-      MAC Address(es).... : 00.10.7f.1f.57.05 
-      IP Address ........ : 10.0.0.151 
-      Subnet Mask ....... : 255.255.255.0 
-      IPv6 Address....... : fe80::210:7fff:fe1f:5705%5 
-      Default Gateway ... : 10.0.0.1 
-      DNS Servers........ : None 
+# RMC3
+RMC3>ipconfig
+Ethernet Adapter [CPSW3G1]:
+	 Link Status ....... : OK 
+	 DHCP .............. : OFF 
+	 MAC Address(es).... : 00.10.7f.6d.d1.45 
+	 IP Address ........ : 192.168.1.10 
+	 Subnet Mask ....... : 255.255.255.0 
+	 IPv6 Address....... : fe80::5da1:8a37:47b1:122a%2 
+	 Default Gateway ... : 192.168.1.1 
+
+	 DNS Servers........ : 8.8.4.4 (static) 
+	                       8.8.8.8 (static) 
+	                       192.168.0.1 (DHCP)
+ 
  */
 
     INTEGER start, end, count;
@@ -536,13 +561,13 @@ Ethernet Adapter [LAN9217]:
     // MAC Address
     start = FIND("MAC Address(es).... : ", console) + 22;
     end = FIND("\n", console, start);
-    count = end - start;
+	count = end - start;
     Processor.mac_address = MID(console, start, count);
 
     // IP Address
     start = FIND("IP Address ........ : ", console) + 22;
     end = FIND("\n", console, start);
-    count = end - start;
+	count = end - start;
     Processor.ip_address = MID(console, start, count);
 
     SendKeyValue("mac-address", Processor.mac_address);
@@ -557,35 +582,47 @@ FUNCTION GetNetwork()
 FUNCTION SetNetwork(STRING console)
 {
 /* EXAMPLE
+# PRO2 with C2ENET-1
+PRO2>est
 Ethernet Status: LAN A        LAN B
   Link Status:   OK           No Link 
   Link Speed:    100 Mbps     n/a
   Full Duplex:   YES          n/a
 Ethernet Parameters:
   Enabled:     On
-  MAC Address(es): 00.10.7f.37.5c.9b        NOT_FOUND
-  IP Address:  192.168.001.051    Not Loaded
+  MAC Address(es): 00.10.7f.04.0f.6b        NOT_FOUND
+  IP Address:  192.168.001.011    Not Loaded
   Subnet Mask: 255.255.255.000    Not Loaded
   Def Router : 192.168.001.001
   DHCP:        Off
   WINS:        Off
-  Host Name:   ADELYTEPRO2
+  Host Name:   ADELYTE-PRO2
   Domain Name: (none entered)
   SSL:         OFF,Off
+DNS Server Information:
+  Server  IP_Address.
+	1    192.168.1.1       (static)
+Console Client Parameters:
+ Enabled: Off
+ Console Server IP Address: 0.0.0.0 
+ Console Server Port Number: 0 
+ Console Client Max Retries: 100 
+ Console Client Idle Timeout (In Seconds): 900 
+ Console Client Disconnected. 
+IP Table:
+CIP_ID  Type    Status     DevID  Port   IP Address/SiteName
 */
 
     INTEGER start, end, count;
 
     // MAC Address
-    start = FIND("MAC Address(es).... : ", console) + 22;
-    end = FIND("\n", console, start);
-    count = end - start;
+    start = FIND("MAC Address(es): ", console) + 17;
+    count = 17; // LEN("00.00.00.00.00.00")
     Processor.mac_address = MID(console, start, count);
 
     // IP Address
-    start = FIND("IP Address ........ : ", console) + 22;
-    end = FIND("\n", console, start);
-    count = end - start;
+    start = FIND("IP Address: ", console) + 12;
+    count = 15; // LEN("000.000.000.000")
     Processor.ip_address = MID(console, start, count);
 
     SendKeyValue("mac-address", Processor.mac_address);
@@ -681,9 +718,9 @@ FUNCTION GetMemory()
 FUNCTION SetMemory(STRING console)
 {
 /* EXAMPLE
-42427372 bytes free
-24681492 bytes used
-Blk starts at 81DC0D9C
+20655852 bytes free
+12898580 bytes used
+Blk starts at 80C5D84C
 */
 
     INTEGER start, end, count;
@@ -710,16 +747,13 @@ FUNCTION GetLoad()
 FUNCTION SetLoad(STRING console)
 {
 /* EXAMPLE
-Sorting...
-
-thread=ReaLIdle	utilization=99.56%
-thread=TCP_Read	utilization=0.2%
-thread=ERR TASK	utilization=0.2%
+thread=ReaLIdle	utilization=91.47%
+thread=LogicPro	utilization=4.44%
 */
 
     INTEGER start, end, count;
 
-    start = FIND("thread=ReaLIdle	utilization=", console) + 30;
+    start = FIND("thread=ReaLIdle	utilization=", console) + 28;
     end = FIND("%\n", console, start);
     count = end - start;
     Processor.cpu_idle = MID(console, start, count);
@@ -736,6 +770,20 @@ FUNCTION SetKeyValues()
   {
     IF(Digital_Key[index] != "")
     {
+	    #IF_DEFINED #KEY_VALUE_ENABLE
+        IF(Enable_Digital_Key[index])
+        {
+		    IF(Digital_Value_Is[index])
+	        {
+	            SendKeyValue(Digital_Key[index], "true");
+	        }
+	        ELSE
+	        {
+	            SendKeyValue(Digital_Key[index], "false");
+	        }
+        }
+	    #ENDIF
+        #IF_NOT_DEFINED #KEY_VALUE_ENABLE
         IF(Digital_Value_Is[index])
         {
             SendKeyValue(Digital_Key[index], "true");
@@ -744,16 +792,33 @@ FUNCTION SetKeyValues()
         {
             SendKeyValue(Digital_Key[index], "false");
         }
+        #ENDIF
     }
 
     IF(Analog_Key[index] != "")
     {
+        #IF_DEFINED #KEY_VALUE_ENABLE
+        IF(Enable_Analog_Key[index])
+        {
+		    SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
+        }
+	    #ENDIF
+        #IF_NOT_DEFINED #KEY_VALUE_ENABLE
         SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
+        #ENDIF
     }
 
     IF(Serial_Key[index] != "")
     {
+        #IF_DEFINED #KEY_VALUE_ENABLE
+        IF(Enable_Serial_Key[index])
+        {
+		    SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+        }
+	    #ENDIF
+        #IF_NOT_DEFINED #KEY_VALUE_ENABLE
         SendKeyValue(Serial_Key[index], Serial_Value_Is[index]);
+        #ENDIF
     }
   }
 }
@@ -798,11 +863,7 @@ CHANGE Console_Rx
         SetVersion(rx);
         GetNetwork();
     }
-    ELSE IF(__Console_Tx__ = "ipconfig")
-    {
-        SetNetwork(rx);
-        GetProgCom();
-    }
+
     ELSE IF(__Console_Tx__ = "progcom")
     {
         SetProgCom(rx);
@@ -822,6 +883,11 @@ CHANGE Console_Rx
 	    {
 	        SetMemory(rx);
 	    }
+	    ELSE IF(__Console_Tx__ = "ipconfig")
+	    {
+	        SetNetwork(rx);
+	        GetProgCom();
+	    }
 	    ELSE IF(__Console_Tx__ = "cpuload")
 	    {
 	        SetLoad(rx);
@@ -834,6 +900,11 @@ CHANGE Console_Rx
 	    IF(__Console_Tx__ = "heapfree")
 	    {
 	        SetMemory(rx);
+	    }
+	    ELSE IF(__Console_Tx__ = "est")
+	    {
+	        SetNetwork(rx);
+	        GetProgCom();
 	    }
 	    ELSE IF(__Console_Tx__ = "top")
 	    {
@@ -1040,6 +1111,13 @@ PUSH Digital_Value_Is
 
     TRACE("Digital_Value_Is[%u] true", index);
 
+    #IF_DEFINED #KEY_VALUE_ENABLE
+    IF(Enable_Digital_Key[index] = 0)
+    {
+        TERMINATEEVENT;
+    }
+    #ENDIF
+
     IF(Connected)
     {
         SendKeyValue(Digital_Key[index], "true");
@@ -1053,6 +1131,13 @@ RELEASE Digital_Value_Is
     index = GETLASTMODIFIEDARRAYINDEX();
 
     TRACE("Digital_Value_Is[%u] false", index);
+
+    #IF_DEFINED #KEY_VALUE_ENABLE
+    IF(Enable_Digital_Key[index] = 0)
+    {
+        TERMINATEEVENT;
+    }
+    #ENDIF
 
     IF(Connected)
     {
@@ -1068,9 +1153,16 @@ CHANGE Analog_Value_Is
 
     TRACE("Analog_Value_Is[%u] = %u", index, Analog_Value_Is[index]);
 
+    #IF_DEFINED #KEY_VALUE_ENABLE
+    IF(Enable_Analog_Key[index] = 0)
+    {
+        TERMINATEEVENT;
+    }
+    #ENDIF
+
     IF(Connected)
     {
-        SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index])); // FIXME: hack route to ID
+        SendKeyValue(Analog_Key[index], ITOA(Analog_Value_Is[index]));
     }
 }
 
@@ -1081,6 +1173,13 @@ CHANGE Serial_Value_Is
     index = GETLASTMODIFIEDARRAYINDEX();
 
     TRACE("Serial_Value_Is[%u] = '%s'", index, Serial_Value_Is[index]);
+
+    #IF_DEFINED #KEY_VALUE_ENABLE
+    IF(Enable_Serial_Key[index] = 0)
+    {
+        TERMINATEEVENT;
+    }
+    #ENDIF
 
     IF(Connected)
     {
