@@ -3,4 +3,6 @@ SPlsWork
 *.lpz
 *.sig
 *.sm2
+*.spz
+*.spz.hash
 *.zip
