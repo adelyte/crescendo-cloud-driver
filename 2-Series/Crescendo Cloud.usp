@@ -55,8 +55,8 @@
 
 // Inputs and Outputs
 
-DIGITAL_INPUT  Connect, Disconnect, _SKIP_;
-DIGITAL_OUTPUT Connected, _SKIP_, _SKIP_;
+DIGITAL_INPUT  Connect, Disconnect, _SKIP_, _SKIP_;
+DIGITAL_OUTPUT Connected, _SKIP_, _SKIP_, _SKIP_;
 
 #IF_SERIES2
 DIGITAL_INPUT  _SKIP_;
@@ -93,6 +93,7 @@ STRING_OUTPUT Serial_Value[#KEY_VALUE_SIZE];
 TCP_CLIENT Client[4095];
 
 STRING_PARAMETER Project[32];
+STRING_PARAMETER Password[255];
 STRING_PARAMETER Users[250];
 STRING_PARAMETER Server_Region[15];
 #IF_SERIES2
@@ -106,6 +107,14 @@ STRING_PARAMETER _SKIP_;
 
 STRING_PARAMETER Analog_Key[#KEY_VALUE_SIZE][250], _SKIP_;
 STRING_PARAMETER Serial_Key[#KEY_VALUE_SIZE][250];
+
+#BEGIN_PARAMETER_PROPERTIES Password
+
+    propValidUnits = unitString;
+    propDefaultValue = "Password";
+    propShortDescription = "Reserved for future use.";
+
+#END_PARAMETER_PROPERTIES
 
 #IF_NOT_DEFINED #EMBED
 #BEGIN_PARAMETER_PROPERTIES Server_Region
