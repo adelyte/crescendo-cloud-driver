@@ -431,6 +431,7 @@ STRUCTURE SYSTEM
     STRING program_name[255], program_compiled_at[20];
     STRING memory_free[10], memory_used[10];
     STRING cpu_idle[6];
+	INTEGER rebooted;
 };
 
 SYSTEM Processor;
@@ -637,9 +638,14 @@ FUNCTION GetUptime()
 
 FUNCTION SetUptime(STRING console)
 {
-/* EXAMPLE
+/* EXAMPLES
+RMC3>uptime
 The system has been running for 1 days 20:57:04.00
 The system last started on: Sunday, December 06, 2015 at 14:36:36
+
+PRO2>uptime
+The system has been running for 0 days 03:21:19.48
+The system last started on: Sun Jul 17, 2016 at 14:07:05
 */
 
     INTEGER start, end, count;
@@ -947,6 +953,12 @@ FUNCTION __Init__()
         AnalogHashSet(Analog_Key[i], i);
         SerialHashSet(Serial_Key[i], i);
     }
+
+	IF(Processor.rebooted)
+	{
+		Processor.rebooted = 0;
+		SendKeyValue("rebooted", "true");
+	}
 
     GetVersion();
 }
@@ -1420,6 +1432,8 @@ FUNCTION Main()
     __Parsing__ = 0;
     __Prompt__ = "";
     __Rx_Buffer__ = "";
+
+	Processor.rebooted = 1;
 
     WAITFORINITIALIZATIONCOMPLETE();
 
