@@ -3525,7 +3525,9 @@
   ObjTp=Dp
   H=4
   Tp=1
-  HD=False
+  SD=email@example.com[, other.email@example.com]
+  HD=True
+  DV=
   NoS=False
   VVS=0
 [END]
@@ -3561,7 +3563,7 @@
   Tp=1
   SD=Eight-character, zero-padded serial code, e.g. '01234567'.
   HD=True
-  DV=00000000
+  DV=
   NoS=False
   VVS=0
 [END]
