@@ -1,6 +1,7 @@
 SPlsWork
 *.ASV
 *.lpz
+*.lpz.hash
 *.sig
 *.sm2
 *.spz

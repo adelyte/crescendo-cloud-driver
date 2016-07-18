@@ -22,6 +22,7 @@ DbVr=57.00.003.00
 DvcDbVr=76.05.002.00
 PgmNm=Adelyte Company
 DlrNm=Electronic Home
+CltNm=Crescendo Cloud 2-Series Driver
 SmVr=1001
 DvVr=1001
 TpN1=1
@@ -1206,20 +1207,6 @@ Sy1=0
 Mx1=0
 ]
 [
-ObjTp=Bw
-H=1
-Lx=0
-Ly=0
-Rx=787
-Ry=633
-Xm=-1
-Ym=-1
-SH=25
-Z=100
-Ht=3
-Hi=6
-]
-[
 ObjTp=Sm
 H=1
 SmC=157
@@ -1277,7 +1264,7 @@ H=4
 SmC=156
 Nm=Logic
 ObjVer=1
-CF=2
+CF=1
 mC=1
 C1=18
 ]
@@ -1509,7 +1496,7 @@ SmC=156
 Nm=SUBSYSTEM
 ObjVer=1
 PrH=4
-CF=2
+CF=1
 Cmn1=System\\
 mC=2
 C1=22
@@ -1522,7 +1509,7 @@ SmC=156
 Nm=SUBSYSTEM
 ObjVer=1
 PrH=18
-CF=2
+CF=1
 Cmn1=Crescendo Cloud\\
 mC=3
 C1=23
@@ -1587,14 +1574,14 @@ SmC=103
 Nm=Crescendo Cloud.usp
 ObjVer=1
 PrH=21
-CF=2
+CF=1
 n1I=204
 n2I=401
 n1O=204
 mI=605
 I1=10
 I2=456
-I6=4
+I6=1
 I7=1
 I8=1
 I9=1
@@ -1795,7 +1782,7 @@ I203=1
 I205=459
 I206=460
 I207=461
-I209=6
+I209=1
 I210=1
 I211=1
 I212=1
@@ -1993,7 +1980,7 @@ I403=1
 I404=1
 I405=1
 I406=1
-I408=8
+I408=1
 I409=1
 I410=1
 I411=1
@@ -2194,7 +2181,7 @@ I605=1
 mO=605
 tO=605
 O1=457
-O6=5
+O6=1
 O7=1
 O8=1
 O9=1
@@ -2393,8 +2380,8 @@ O201=1
 O202=1
 O203=1
 O205=458
-O206=51
-O209=7
+O206=4
+O209=1
 O210=1
 O211=1
 O212=1
@@ -2592,7 +2579,7 @@ O403=1
 O404=1
 O405=1
 O406=1
-O408=9
+O408=1
 O409=1
 O410=1
 O411=1
@@ -2794,10 +2781,11 @@ mP=606
 P1=
 P2=Crescendo Cloud 2-Series Driver
 P3=""
-P4=chris@adelyte.com
-P5=SFO
-P6=1732152
-P7=Digital 1 Test
+P4=
+P5=NYC
+Plb5=New York
+P6=
+P7=""
 P8=""
 P9=""
 P10=""
@@ -3000,7 +2988,7 @@ P206=
 P207=
 P208=
 P209=
-P210=Analog 1 Test
+P210=""
 P211=""
 P212=""
 P213=""
@@ -3199,7 +3187,7 @@ P405=""
 P406=""
 P407=""
 P408=
-P409=Serial 1 Test
+P409=""
 P410=""
 P411=""
 P412=""
@@ -3401,47 +3389,13 @@ P606=""
 [
 ObjTp=Sg
 H=4
-Nm=Digital_1_Test_Is
-]
-[
-ObjTp=Sg
-H=5
-Nm=Digital_1_Test
-]
-[
-ObjTp=Sg
-H=6
-Nm=Analog_1_Test_Is
-SgTp=2
-]
-[
-ObjTp=Sg
-H=7
-Nm=Analog_1_Test
-SgTp=4
-]
-[
-ObjTp=Sg
-H=8
-Nm=Serial_1_Test_Is
-SgTp=4
-]
-[
-ObjTp=Sg
-H=9
-Nm=Serial_1_Test
+Nm=//Z-Cloud__Cloud_Rx~
 SgTp=4
 ]
 [
 ObjTp=Sg
 H=10
 Nm=Z-Cloud__Connect
-]
-[
-ObjTp=Sg
-H=51
-Nm=//Z-Cloud__Console_Rx~
-SgTp=4
 ]
 [
 ObjTp=Sg
