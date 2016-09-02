@@ -58,6 +58,7 @@
 
 // Inputs and Outputs
 #DEFINE_CONSTANT #CONSOLE_LEN 65534
+#DEFINE_CONSTANT #ANALOG_VALUES_AS_SERIAL 1 // Typecast `Analog_Value[]` outputs as serial rather than analog
 
 DIGITAL_INPUT  Connect, Disconnect, _SKIP_, _SKIP_;
 DIGITAL_OUTPUT Connected, _SKIP_, _SKIP_, _SKIP_;
@@ -89,7 +90,12 @@ STRING_OUTPUT _SKIP_;
 STRING_INPUT  User_Program_Command[255], _SKIP_;
 
 ANALOG_INPUT  Analog_Value_Is[#KEY_VALUE_SIZE], _SKIP_;
-STRING_OUTPUT Analog_Value[#KEY_VALUE_SIZE], _SKIP_; // Analog values are set with strings
+#IF_DEFINED #ANALOG_VALUES_AS_SERIAL
+STRING_OUTPUT Analog_Value[#KEY_VALUE_SIZE], _SKIP_;
+#ENDIF
+#IF_NOT_DEFINED #ANALOG_VALUES_AS_SERIAL
+ANALOG_OUTPUT Analog_Value[#KEY_VALUE_SIZE], _SKIP_;
+#ENDIF
 
 STRING_INPUT  Serial_Value_Is[#KEY_VALUE_SIZE][255];
 STRING_OUTPUT Serial_Value[#KEY_VALUE_SIZE];
@@ -514,7 +520,7 @@ FUNCTION SetVersion(STRING console)
     start = FIND(", #", console) + 3;
     end = FIND("]", console, start);
     count = end - start;
-    Processor.serial_code = MID(console, start, count);
+    Processor.serial_code = "0x" + MID(console, start, count);
     #ELSE
     Processor.serial_code = Serial_Code;
     #ENDIF
@@ -1271,6 +1277,7 @@ SOCKETRECEIVE Client
                 IF(i <= #KEY_VALUE_SIZE)
                 {
                     value = ATOI(rx);
+					#IF_DEFINED #ANALOG_VALUES_AS_SERIAL
                     IF(value > 255)
                     {
                         MAKESTRING(Analog_Value[i], "%c%c", HIGH(value), LOW(value));
@@ -1279,6 +1286,10 @@ SOCKETRECEIVE Client
                     {
                         MAKESTRING(Analog_Value[i], "%c", value);
                     }
+					#ENDIF
+					#IF_NOT_DEFINED #ANALOG_VALUES_AS_SERIAL
+					Analog_Value[i] = value;
+					#ENDIF
                 }
             }
             ELSE
