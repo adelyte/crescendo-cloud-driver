@@ -8,7 +8,7 @@
 #DEFAULT_VOLATILE
 #ENABLE_DYNAMIC
 
-#DEFINE_CONSTANT #VERSION "1.1.0"
+#DEFINE_CONSTANT #VERSION "1.1.1"
 
 
 // Compiler Settings
@@ -1014,6 +1014,15 @@ CHANGE Console_Rx
     IF(__Prompt__ = "")
     {
         __Prompt__ = REMOVE(">", Console_Rx);
+
+        // NOTE: `REMOVE` has undefined behavior if delimiter is not found
+        IF(RIGHT(__Prompt__, 1) != ">")
+        {
+            __Prompt__ = "";
+            SendConsoleDirect("", "\r");
+            TERMINATEEVENT;
+        }
+
         GENERATEUSERNOTICE("Crescendo Cloud> PROMPT is '%s'", __Prompt__);
 
         TERMINATEEVENT;
